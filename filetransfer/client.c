@@ -67,19 +67,20 @@ int main() {
     } 
     fseek(stream, 0L, SEEK_END); 
     long int streamEnd = ftell(stream);
-    
+    fseek(stream, 0L, 0L);
+    printf("%d", streamEnd);
     int d;
     unsigned int frag_no = 0;
     unsigned int total_frag = (int)(streamEnd/FRAG_SIZE) + 1;
     unsigned int size = 1000;
     char *filename = "data.txt";
     char frag[FRAG_SIZE];
-    
+    /*
     d = fread(&frag, sizeof(char), FRAG_SIZE, stream);
     char cPacket[];
     sprintf(cPacket, "%d:%d:%d:%s:", total_frag, frag_no, size, filename);
     printf("%s", cPacket);
-
+    */
     close(sockfd); 
     return 0; 
 } 
