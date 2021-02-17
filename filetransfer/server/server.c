@@ -24,7 +24,7 @@ int getPort(char *arr[], int argc) {
 }
 
 void parsePacket(char *packet, char **total_frag, char **frag_no, 
-                char **size, char **filename, char **frag) 
+                char **size, char **filename, char **filedata) 
 {
     char *token = strtok(packet, ":"); 
     int c = 0;
@@ -40,7 +40,7 @@ void parsePacket(char *packet, char **total_frag, char **frag_no,
             case 3:
                 *filename = token;
             case 4:
-                *frag = token; 
+                *filedata = token; 
         }
         c += 1;
         token = strtok(NULL, ":"); 
@@ -94,7 +94,7 @@ int main(int argc, char *argv[]) {
     servaddr.sin_port = htons(PORT); 
       
     // Bind the socket with the server address 
-    if ( bind(sockfd, (const struct sockaddr *)&servaddr,  
+    if (bind(sockfd, (const struct sockaddr *)&servaddr,  
             sizeof(servaddr)) < 0 ) 
     { 
         perror("bind failed"); 
@@ -104,42 +104,48 @@ int main(int argc, char *argv[]) {
     int len, n; 
   
     len = sizeof(cliaddr);
-  
-    n = recvfrom(sockfd, (char *)buffer, MAXLINE, MSG_WAITALL,
-        ( struct sockaddr *) &cliaddr, &len);  
+   
+    //initials packet data
+    FILE *outStream = NULL;  
+    char *total_frag, *frag_no, *size, *filename, *filedata;
+    //status message to send to client (OK, FAILED, DONE)
+    char *status;
+    //receive packets from client
+    while (1) {
+        //recieve packet
+        n = recvfrom(sockfd, (char *)buffer, MAXLINE, MSG_WAITALL,
+            ( struct sockaddr *) &cliaddr, &len);
+        //parse packet data
+        parsePacket(&buffer, &total_frag, &frag_no,
+            &size, &filename, &filedata);
 
-    int is_valid = strcmp("ftp", &buffer);
-    char *response = "GOOD";
-    /*
-    if (is_valid != 0) {
-        response = no;
-    } else {
-        response = yes;
-    }
-    */
-    char *total_frag, *frag_no, *size, *filename, *frag;
-    parsePacket(&buffer, &total_frag, &frag_no,
-        &size, &filename, &frag);
+        //if first packet open file stream
+        if (!outStream) outStream = fopen(filename, "w");
+        if (!outStream) {
+            printf("File cannot be created.");
+            return -1;
+        }
+        //get total and current packet
+        long totalPackets = strtol(total_frag, NULL, 10);
+        long currentPacket = strtol(frag_no, NULL, 10);
+        //get size of packets filedata
+        int dataSize = strtonum(size, 0, 1000, NULL);
+        //parse byte string to char array
+        char *parsedData = bytesToString(filedata, dataSize);
+        printf("%s\n", filedata);
 
-    FILE *stream = fopen("output.txt", "w");
-    if (!stream) {
-        printf("File cannot be created.");
-        return -1;
-    }
+        //write char array to output file stream 
+        fputs(parsedData, outStream);
+        if (currentPacket == totalPackets) {
+            sendto(sockfd, (const char *)"DONE", strlen("DONE"),  
+                NULL, (const struct sockaddr *) &cliaddr, len);
+            fclose(outStream);
+            return 0;
+        } 
+        sendto(sockfd, (const char *)"OK", strlen("OK"),  
+                NULL, (const struct sockaddr *) &cliaddr, len);
+   }
     
-    printf("%s\n", frag);
-    int dataSize = strtonum(size, 0, 1000, NULL);
-    char *data = bytesToString(frag, dataSize);
-
-    fprintf(stream, data);
-
-    //printf("%s\n", total_frag);
-    //printf("%s\n", frag_no);
-    //printf("%s\n", size);
-    //printf("%s\n", filename);
-
-    sendto(sockfd, (const char *)response, strlen(response),  
-        NULL, (const struct sockaddr *) &cliaddr, len);
-
+    printf("DONE");
     return 0; 
 }

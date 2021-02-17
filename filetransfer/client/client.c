@@ -12,6 +12,8 @@
 #define MAXLINE 1024 
 #define FRAG_SIZE 1000
 
+static const char *FILENAME = "data.txt";
+
 struct Packet {
     unsigned int total_frag;
     unsigned int frag_no;
@@ -19,6 +21,13 @@ struct Packet {
     char* filename;
     char filedata[FRAG_SIZE];
 };
+
+void printPacket(struct Packet p) {
+    printf("\n-- Packet --\n");
+    printf("total_frag = %d | frag_no = %d | size = %d | filename = %s\n", 
+        p.total_frag, p.frag_no, p.size, p.filename);
+    printf("data: %s", p.filedata);
+}
 
 char *stringToBinary(char* s) {
     if(s == NULL) return 0; 
@@ -71,7 +80,7 @@ int main() {
         return -1;
     }
     */ 
-    FILE *stream = fopen("data.txt", "rb");
+    FILE *stream = fopen(FILENAME, "rb");
     if (!stream) {
         printf("File does not exist");
         fclose(stream);
@@ -79,33 +88,34 @@ int main() {
     } 
     //get total size of file
     fseek(stream, 0L, SEEK_END); 
-    long int streamEnd = ftell(stream);
+    long int streamSize = ftell(stream);
     fseek(stream, 0L, 0L);
     //points to current frag location in file    
     long int streamPtr = ftell(stream);
+    //initial packet
     struct Packet cPacket; 
-    cPacket.filename = "data.txt";
-    cPacket.total_frag = (int)(streamEnd/FRAG_SIZE) + 1;
-    cPacket.frag_no = 0;
+    cPacket.filename = FILENAME;
+    cPacket.total_frag = (int)(((streamSize)*8)/1000) + 1;
+    cPacket.frag_no = 1;
 
-    while (streamPtr < streamEnd) {
+    while (cPacket.frag_no <= cPacket.total_frag) {
         //check if frag excedes eof
-        if (streamPtr + FRAG_SIZE > streamEnd) {
-            cPacket.size = streamEnd - streamPtr;
-        } else {
-            cPacket.size = FRAG_SIZE;
-        }
-        fread(cPacket.filedata, FRAG_SIZE, 1, stream);
+        fread(cPacket.filedata, 1, FRAG_SIZE/8, stream);
         streamPtr = ftell(stream);
-        cPacket.frag_no += 1;
         //convert file data to byte string
         char *binData = stringToBinary(cPacket.filedata);
-        char *packetSerial;
-        //create serial representation of packet
-        asprintf(&packetSerial, "%d:%d:%d:%s:%s", cPacket.total_frag, 
-                cPacket.frag_no, cPacket.size, cPacket.filename, binData);
-        sendto(sockfd, (const char *)packetSerial, strlen(packetSerial), 
+        cPacket.size = strlen(binData);
+        //serialize current packet
+        char *serializedPacket;
+        asprintf(&serializedPacket, "%d:%d:%d:%s:%s", cPacket.total_frag, 
+            cPacket.frag_no, cPacket.size, cPacket.filename, binData);
+        
+        //printPacket(cPacket);
+        //send packet
+        sendto(sockfd, (const char *)serializedPacket, strlen(serializedPacket), 
             0, (const struct sockaddr *) &servaddr, sizeof(servaddr));
+        cPacket.frag_no += 1;
+        memset(cPacket.filedata, 0, sizeof(cPacket.filedata));
     }
 
     close(sockfd); 
